@@ -1,0 +1,150 @@
+#!/bin/sh
+
+#dirgraph
+#Author: Adriana Jurkechová, xjurke02@fit.vutbr.cz
+#Date: 31.03.2020
+#Shell script for counting directories and files and sorting them by size.
+
+POSIXLY_CORRECT=yes
+
+DIR=$(pwd)
+ND=0
+NF=0
+ignore=false
+pattern=""
+normalization=0
+
+#parsing arguments by getopts
+while getopts i:n o
+do 
+    case "$o" in
+    i)
+        ignore=true
+        pattern="$OPTARG";;
+    n)
+        normalization=1;;
+    *)
+        echo "Wrong usage of parameters."
+        exit 1;;
+    esac
+done
+
+shift "$(( OPTIND-1 ))"
+
+#if there was a directory given by argument, script uses that directory. otherwise the present working directory is used.  
+if [ $# -eq 1 ]; then
+    DIR="$1"
+    else
+    DIR="$(pwd)"
+fi
+
+#checking if directory exists and if it really is a directory.
+if [ ! -d "$DIR" ]; then
+   echo "'$DIR' does not exist or it is not a directory."
+   exit 1
+fi
+
+#if regex was given, it uses egrep to ignore that regular expression 
+if [ "$pattern" ]; then
+
+    #checking if regex is not in name of root directory
+	if printf "$DIR" | egrep -q "$pattern"; then
+		echo "You can not ignore a root directory." >&2
+		exit 1
+	fi
+
+    ND=$(find -L "$DIR" -type d | egrep -v "$pattern" | wc -l)
+    NF=$(find -L "$DIR" -type f | egrep -v "$pattern" | wc -l)
+
+    filesize1=$(find -L "$DIR" -type f -size -100c 2>/dev/null | egrep  -v "$pattern" | wc -l)        
+    filesize2=$(find -L "$DIR" -type f -size +99c -size -1024c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize3=$(find -L "$DIR" -type f -size +1023c -size -10240c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize4=$(find -L "$DIR" -type f -size +10239c -size -102400c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize5=$(find -L "$DIR" -type f -size +102399c -size -1048576c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize6=$(find -L "$DIR" -type f -size +1048575c -size -10485760c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize7=$(find -L "$DIR" -type f -size +10485759c -size -104857600c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize8=$(find -L "$DIR" -type f -size +104857599c -size -1073741824c 2>/dev/null | egrep -v "$pattern" | wc -l)   
+    filesize9=$(find -L "$DIR" -type f -size +1073741823c 2>/dev/null | egrep -v "$pattern" | wc -l) 
+
+else
+
+    ND=$(find -L "$DIR" -type d | wc -l)
+    NF=$(find -L "$DIR" -type f | wc -l)
+
+    filesize1=$(find -L "$DIR" -type f -size -100c 2>/dev/null | wc -l)        
+    filesize2=$(find -L "$DIR" -type f -size +99c -size -1024c 2>/dev/null | wc -l)   
+    filesize3=$(find -L "$DIR" -type f -size +1023c -size -10240c 2>/dev/null | wc -l)   
+    filesize4=$(find -L "$DIR" -type f -size +10239c -size -102400c 2>/dev/null | wc -l)   
+    filesize5=$(find -L "$DIR" -type f -size +102399c -size -1048576c 2>/dev/null | wc -l)   
+    filesize6=$(find -L "$DIR" -type f -size +1048575c -size -10485760c 2>/dev/null | wc -l)   
+    filesize7=$(find -L "$DIR" -type f -size +10485759c -size -104857600c 2>/dev/null | wc -l)   
+    filesize8=$(find -L "$DIR" -type f -size +104857599c -size -1073741824c 2>/dev/null | wc -l)   
+    filesize9=$(find -L "$DIR" -type f -size +1073741823c 2>/dev/null | wc -l)   
+ 
+fi
+
+#if -n switch was used, it change size of histogram lines 
+if [ "$normalization" -eq 1 ]; then
+
+    max_hashes=67 #79-12 #79 was defined in task, 12 represents quantity of histogram headers
+    if [ -t 1 ]; then #if script runs in terminal maximum of hashes will be given by tput
+		max_hashes=$(tput cols)
+		max_hashes=$(( max_hashes-13 )) #12 for histogram header, 1 defined in task
+	fi
+
+    #finding out the maximal quantity of files with same size interval
+    greatest=0
+    for i in $filesize1 $filesize2 $filesize3 $filesize4 $filesize5 $filesize6 $filesize7 $filesize8 $filesize9
+    do
+        if [ "$greatest" -le "$i" ]; then
+            greatest=$i
+        else 
+            greatest=$greatest
+        fi
+    done
+
+    #if there is more files with same size interval then quantity of hashes, normalization will used, otherwise it is not needed.
+    if [ "$max_hashes" -lt "$greatest" ]; then
+
+    part=$(( $greatest / $max_hashes ))
+    
+    filesize1=$(( $filesize1 / $part ))
+    filesize2=$(( $filesize2 / $part ))
+    filesize3=$(( $filesize3 / $part ))
+    filesize4=$(( $filesize4 / $part ))
+    filesize5=$(( $filesize5 / $part ))
+    filesize6=$(( $filesize6 / $part ))
+    filesize7=$(( $filesize7 / $part ))
+    filesize8=$(( $filesize8 / $part ))
+    filesize9=$(( $filesize9 / $part ))
+
+    fi
+fi
+
+#function for printing hashes to histogram
+hashes ()
+{
+	if [ "$1" -ne 0 ]; then
+		printf '%.0s#' $(seq 1 $1)
+	fi
+	printf '\n'
+}
+
+echo "Root directory: $DIR"
+echo "Directories: $ND"
+echo "All files: $NF"
+echo "File size histogram:"
+
+printf "  <100 B  : " ; hashes "${filesize1}"
+printf "  <1 KiB  : " ; hashes "${filesize2}"
+printf "  <10 KiB : " ; hashes "${filesize3}"
+printf "  <100 KiB: " ; hashes "${filesize4}"
+printf "  <1 MiB  : " ; hashes "${filesize5}"
+printf "  <10 MiB : " ; hashes "${filesize6}"
+printf "  <100 MiB: " ; hashes "${filesize7}"
+printf "  <1 GiB  : " ; hashes "${filesize8}"
+printf "  >=1 GiB : " ; hashes "${filesize9}"
+
+exit 0
+
+#end of file
